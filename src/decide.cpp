@@ -42,12 +42,31 @@ int Internal::next_decision_variable () {
 
 /*------------------------------------------------------------------------*/
 
+
+// Implements LSIDS based phase selection
+// Checks the score for both the literals of the variable, returns the higher
+
+int Internal::select_lsids_based_phase (int idx) {
+
+  assert (idx <= max_var);
+  unsigned int pos = 2u * idx ;
+  unsigned int neg = 2u * idx + 1 ;
+
+  if (lstab[pos] > lstab[neg])
+      return 1;
+  else
+      return -1;
+}
+
+/*------------------------------------------------------------------------*/
+
 // Implements phase saving as well using a target phase during
 // stabilization unless decision phase is forced to the initial value.
 
 int Internal::decide_phase (int idx, bool target) {
   const int initial_phase = opts.phase ? 1 : -1;
   int phase = 0;
+  if (cbt && use_lsids()) phase = select_lsids_based_phase(idx);
   if (force_saved_phase) phase = phases.saved[idx];
   if (!phase && opts.forcephase) phase = initial_phase;
   if (!phase && target)  phase = phases.target[idx];

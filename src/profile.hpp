@@ -42,6 +42,7 @@ PROFILE(analyze,3) \
 PROFILE(backward,3) \
 PROFILE(block,2) \
 PROFILE(bump,4) \
+PROFILE(bump_literal,4) \
 PROFILE(checking,2) \
 PROFILE(cdcl,1) \
 PROFILE(collect,3) \

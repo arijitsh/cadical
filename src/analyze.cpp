@@ -176,6 +176,93 @@ void Internal::bump_variables () {
   STOP (bump);
 }
 
+
+/*------------------------------------------------------------------------*/
+
+// Methods to update LSIDS score
+
+
+void Internal::lit_rescore () {
+  stats.lit_rescored++;     //TODO: this is never initialized
+  double divider = lit_scinc;
+  for (int idx = 1; idx <= 2*max_var; idx++) {
+    const double tmp = lstab[idx];
+    if (tmp > divider) divider = tmp;
+  }
+  PHASE ("[LSIDS] rescore", stats.lit_rescored,
+    "rescoring %d variable scores by 1/%g", 2*max_var, divider);
+  assert (divider > 0);
+  double factor = 1.0 / divider;
+  for (int idx = 1; idx <= 2*max_var; idx++)
+    lstab[idx] *= factor;
+  lit_scinc *= factor;
+  PHASE ("[LSIDS] rescore", stats.lit_rescored,
+    "new score increment %g after %ld conflicts",
+    lit_scinc, stats.conflicts);
+}
+
+void Internal::bump_litscore (int lit) {
+  assert (opts.lsids);
+  double old_score = lit_score (lit);
+  assert (!isinf (old_score));
+  double new_score = old_score + lit_scinc;
+  if (isinf (new_score)) {
+    LOG ("[LSIDS] bumping %g score of %d leads to infinite score", old_score, lit);
+    lit_rescore ();
+    old_score = lit_score (lit);
+    assert (!isinf (old_score));
+    new_score = old_score + lit_scinc;
+  }
+  assert (!isinf (new_score));
+  LOG ("[LSIDS] new %g score of %d", new_score, lit);
+  lit_score (-lit) = new_score;      //TODO : This works.
+}
+
+
+// Important literals recently used in conflict analysis are 'bumped',
+
+void Internal::bump_literal (int lit) {
+  if (use_lsids ())
+    bump_litscore (lit);
+}
+
+
+void Internal::bump_literals () {
+
+  assert (opts.lsids);
+
+  START (bump_literal);
+
+  // TODO : On bumping reason literals
+
+  for (const auto & lit : analyzed)
+    bump_literal(lit);
+
+  if (opts.lsids) bump_litscinc ();
+
+  STOP (bump_literal);
+}
+
+
+// After every conflict we increase the LSIDS increment by a factor.
+
+void Internal::bump_litscinc () {
+  assert (!isinf (lit_scinc));
+  double f = 1e3/opts.scorefactor;
+  double new_lit_scinc = lit_scinc * f;
+  if (isinf (new_lit_scinc)) {
+    LOG ("bumping %g increment by %g results in infinity", lit_scinc, f);
+    rescore ();
+    new_lit_scinc = lit_scinc * f;
+  }
+  assert (!isinf (new_lit_scinc));
+  LOG ("bumped score increment from %g to %g with factor %g",
+    lit_scinc, new_lit_scinc, f);
+  lit_scinc = new_lit_scinc;
+}
+
+
+
 /*------------------------------------------------------------------------*/
 
 // We use the glue time stamp table 'gtab' for fast glue computation.
@@ -475,17 +562,21 @@ inline int Internal::determine_actual_backtrack_level (int jump) {
     LOG ("chronological backtracking disabled using jump level %d", res);
   } else if (opts.chronoalways) {
     stats.chrono++;
+    cbt = true;
     res = level - 1;
     LOG ("forced chronological backtracking to level %d", res);
   } else if (jump >= level - 1) {
     res = jump;
+    cbt = true;     // TODO : ok?
     LOG ("jump level identical to chronological backtrack level %d", res);
   } else if ((size_t) jump < assumptions.size ()) {
     res = jump;
+    cbt = false;
     LOG ("using jump level %d since it is lower than assumption level %zd",
       res, assumptions.size ());
   } else if (level - jump > opts.chronolevelim) {
     stats.chrono++;
+    cbt = true;
     res = level - 1;
     LOG ("back-jumping over %d > %d levels prohibited"
       "thus backtracking chronologically to level %d",
@@ -708,6 +799,8 @@ void Internal::analyze () {
   // Update decision heuristics.
   //
   if (opts.bump) bump_variables ();
+  if (opts.lsids) bump_literals ();
+
 
   // Minimize the 1st UIP clause as pioneered by Niklas Soerensson in
   // MiniSAT and described in our joint SAT'09 paper.

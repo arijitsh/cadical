@@ -139,6 +139,7 @@ struct Internal {
   bool termination_forced;      // forced to terminate
   bool searching_lucky_phases;  // during 'lucky_phases'
   bool stable;                  // true during stabilization phase
+  bool cbt;                     // true if solver is in chrono phase
   bool reported;                // reported in this solving call
   char rephased;                // last type of resetting phases
   Reluctant reluctant;          // restart counter in stable mode
@@ -152,8 +153,10 @@ struct Internal {
   vector<int> i2e;              // maps internal idx to external lit
   Queue queue;                  // variable move to front decision queue
   double scinc;                 // current score increment
+  double lit_scinc;             // current score increment
   ScoreSchedule scores;         // score based decision priority queue
   vector<double> stab;          // table of variable scores [1,max_var]
+  vector<double> lstab;         // table of literal scores
   vector<Var> vtab;             // variable table [1,max_var]
   Links links;                  // table of links for decision queue
   vector<Flags> ftab;           // variable and literal flags
@@ -294,6 +297,7 @@ struct Internal {
   int64_t & bumped (int lit) { return btab[vidx (lit)]; }
   int & propfixed (int lit)   { return ptab[vlit (lit)]; }
   double & score (int lit)    { return stab[vidx (lit)]; }
+  double & lit_score (int lit) { return lstab[vlit (lit)]; }
 
   const Flags & flags (int lit) const { return ftab[vidx (lit)]; }
 
@@ -313,6 +317,16 @@ struct Internal {
   void bump_score (int lit);
   void bump_scinc ();
   void rescore ();
+
+
+  // Literal Bumping (for LSIDS scores to be used in phase selection)
+
+  bool use_lsids () const { return opts.lsids && cbt; }
+
+  void bump_litscore (int lit);
+  void bump_litscinc ();
+  void lit_rescore ();
+
 
   // Marking variables with a sign (positive or negative).
   //
@@ -502,6 +516,8 @@ struct Internal {
   void learn_unit_clause (int lit);
   void bump_variable (int lit);
   void bump_variables ();
+  void bump_literal (int lit);
+  void bump_literals ();
   int recompute_glue (Clause *);
   void bump_clause (Clause *);
   void clear_analyzed_literals ();
@@ -912,6 +928,7 @@ struct Internal {
   int decide_phase (int idx, bool target);
   int likely_phase (int idx);
   int decide ();                        // 0=decision, 20=failed
+  int select_lsids_based_phase (int idx);
 
   // Internal functions to enable explicit search limits.
   //

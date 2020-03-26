@@ -22,6 +22,7 @@ Internal::Internal ()
   level (0),
   vals (0),
   scinc (1.0),
+  lit_scinc (1.0),
   scores (this),
   conflict (0),
   ignore (0),
@@ -122,6 +123,7 @@ void Internal::enlarge (int new_max_var) {
   enlarge_zero (btab, new_vsize);
   enlarge_zero (gtab, new_vsize);
   enlarge_zero (stab, new_vsize);
+  enlarge_zero (lstab, 2*new_vsize);
   enlarge_init (ptab, 2*new_vsize, -1);
   enlarge_only (ftab, new_vsize);
   enlarge_vals (new_vsize);

@@ -321,7 +321,7 @@ struct Internal {
 
   // Literal Bumping (for LSIDS scores to be used in phase selection)
 
-  bool use_lsids () const { return opts.lsids && cbt; }
+  bool use_lsids () const { return opts.chronophase == 1 ;}
 
   void bump_litscore (int lit);
   void bump_litscinc ();
@@ -926,6 +926,7 @@ struct Internal {
   int next_decision_variable_with_best_score ();
   int next_decision_variable ();
   int decide_phase (int idx, bool target);
+  int decide_cbt_phase (int idx, bool target);
   int likely_phase (int idx);
   int decide ();                        // 0=decision, 20=failed
   int select_lsids_based_phase (int idx);

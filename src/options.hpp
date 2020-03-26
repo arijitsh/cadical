@@ -40,6 +40,7 @@ OPTION( checkwitness,      1,  0,  1, 0, "check witness internally") \
 OPTION( chrono,            1,  0,  2, 0, "chronological backtracking") \
 OPTION( chronoalways,      0,  0,  1, 0, "force always chronological") \
 OPTION( chronolevelim,   1e2,  0,2e9, 0, "chronological level limit") \
+OPTION( chronophase,       0,  0,  8, 0, "CBT phase: 1=lsids 2=rnd 3=false >4=greedy") \
 OPTION( chronoreusetrail,  1,  0,  1, 0, "reuse trail chronologically") \
 OPTION( compact,           1,  0,  1, 0, "compact internal variables") \
 OPTION( compactint,      2e3,  1,2e9, 0, "compacting interval") \
@@ -99,7 +100,6 @@ OPTION( instantiateocclim, 1,  1,2e9, 2, "maximum occurrence limit") \
 OPTION( instantiateonce,   1,  0,  1, 0, "instantiate each clause once") \
 LOGOPT( log,               0,  0,  1, 0, "enable logging") \
 LOGOPT( logsort,           0,  0,  1, 0, "sort logged clauses") \
-OPTION( lsids,             1,  0,  1, 0, "use LSIDS for phase selection") \
 OPTION( lucky,             1,  0,  1, 0, "search for lucky phases") \
 OPTION( minimize,          1,  0,  1, 0, "minimize learned clauses") \
 OPTION( minimizedepth,   1e3,  0,1e3, 0, "minimization depth") \

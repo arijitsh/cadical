@@ -60,13 +60,36 @@ int Internal::select_lsids_based_phase (int idx) {
 
 /*------------------------------------------------------------------------*/
 
+int Internal::decide_cbt_phase (int idx, bool target) {
+
+  int phase = 0;
+  int heuristic = opts.chronophase;
+  const int initial_phase = opts.phase ? 1 : -1;
+
+  Random random (opts.seed);
+
+  if (heuristic == 1) phase = select_lsids_based_phase(idx);
+  if (heuristic == 2) phase = random.generate_bool () ? -1 : 1;
+  if (heuristic == 3) phase = -1;
+  if (heuristic == 4) phase = phases.target[idx];
+  if (heuristic == 5) phase = phases.best[idx];
+  if (heuristic == 6) phase = phases.prev[idx];
+  if (heuristic == 7) phase = phases.min[idx];
+
+  if (!phase) phase = initial_phase;
+
+  return phase * idx;
+}
+
+/*------------------------------------------------------------------------*/
+
 // Implements phase saving as well using a target phase during
 // stabilization unless decision phase is forced to the initial value.
 
 int Internal::decide_phase (int idx, bool target) {
   const int initial_phase = opts.phase ? 1 : -1;
   int phase = 0;
-  if (cbt && use_lsids()) phase = select_lsids_based_phase(idx);
+  if (cbt && opts.chronophase > 0) return decide_cbt_phase(idx, target);
   if (force_saved_phase) phase = phases.saved[idx];
   if (!phase && opts.forcephase) phase = initial_phase;
   if (!phase && target)  phase = phases.target[idx];

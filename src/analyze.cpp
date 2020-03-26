@@ -202,7 +202,7 @@ void Internal::lit_rescore () {
 }
 
 void Internal::bump_litscore (int lit) {
-  assert (opts.lsids);
+  assert (use_lsids());
   double old_score = lit_score (lit);
   assert (!isinf (old_score));
   double new_score = old_score + lit_scinc;
@@ -229,7 +229,7 @@ void Internal::bump_literal (int lit) {
 
 void Internal::bump_literals () {
 
-  assert (opts.lsids);
+  assert (use_lsids());
 
   START (bump_literal);
 
@@ -238,7 +238,7 @@ void Internal::bump_literals () {
   for (const auto & lit : analyzed)
     bump_literal(lit);
 
-  if (opts.lsids) bump_litscinc ();
+  if (use_lsids()) bump_litscinc ();
 
   STOP (bump_literal);
 }
@@ -799,7 +799,7 @@ void Internal::analyze () {
   // Update decision heuristics.
   //
   if (opts.bump) bump_variables ();
-  if (opts.lsids) bump_literals ();
+  if (use_lsids()) bump_literals ();
 
 
   // Minimize the 1st UIP clause as pioneered by Niklas Soerensson in

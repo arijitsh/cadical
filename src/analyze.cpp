@@ -233,10 +233,11 @@ void Internal::bump_literals () {
 
   START (bump_literal);
 
-  // TODO : On bumping reason literals
+  // TODO : On bumping reason literals?
 
-  for (const auto & lit : analyzed)
+  for (const auto & lit : *conflict){
     bump_literal(lit);
+  }
 
   if (use_lsids()) bump_litscinc ();
 

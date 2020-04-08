@@ -100,6 +100,8 @@ OPTION( instantiateocclim, 1,  1,2e9, 2, "maximum occurrence limit") \
 OPTION( instantiateonce,   1,  0,  1, 0, "instantiate each clause once") \
 LOGOPT( log,               0,  0,  1, 0, "enable logging") \
 LOGOPT( logsort,           0,  0,  1, 0, "sort logged clauses") \
+OPTION( lsidsbumpcancel,   2,  0,  4, 0, "bump lsids at backtrack this much") \
+OPTION( lsidsbumpconfl,    1,  0,  4, 0, "bump lsids of conflict clause this much") \
 OPTION( lucky,             1,  0,  1, 0, "search for lucky phases") \
 OPTION( minimize,          1,  0,  1, 0, "minimize learned clauses") \
 OPTION( minimizedepth,   1e3,  0,1e3, 0, "minimization depth") \

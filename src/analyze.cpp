@@ -201,20 +201,21 @@ void Internal::lit_rescore () {
     lit_scinc, stats.conflicts);
 }
 
-void Internal::bump_litscore (int lit) {
+void Internal::bump_litscore (int lit, double mult) {
   assert (use_lsids());
   double old_score = lit_score (lit);
   assert (!isinf (old_score));
-  double new_score = old_score + lit_scinc;
+  double new_score = old_score + lit_scinc*mult/2.0;
   if (isinf (new_score)) {
     LOG ("[LSIDS] bumping %g score of %d leads to infinite score", old_score, lit);
     lit_rescore ();
     old_score = lit_score (lit);
     assert (!isinf (old_score));
-    new_score = old_score + lit_scinc;
+    new_score = old_score + lit_scinc*mult/2.0;
   }
   assert (!isinf (new_score));
-  LOG ("[LSIDS] new %g score of %d", new_score, lit);
+  LOG ("[LSIDS] new  %g score of %d", new_score, lit);
+  LOG ("[LSIDS] note %g score of %d", lit_score (-lit), -lit);
   lit_score (lit) = new_score;      //TODO : This works.
 }
 
@@ -222,8 +223,9 @@ void Internal::bump_litscore (int lit) {
 // Important literals recently used in conflict analysis are 'bumped',
 
 void Internal::bump_literal (int lit) {
+  double bump_mult = opts.lsidsbumpconfl;
   if (use_lsids ())
-    bump_litscore (lit);
+    bump_litscore (lit, bump_mult);
 }
 
 

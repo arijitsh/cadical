@@ -78,6 +78,7 @@ void Internal::backtrack (int new_level) {
   update_target_and_best ();
 
   const size_t assigned = control[new_level+1].trail;
+  double bump_mult = opts.lsidsbumpcancel;
 
   LOG ("backtracking to decision level %d with decision %d and trail %zd",
     new_level, control[new_level].decision, assigned);
@@ -93,7 +94,7 @@ void Internal::backtrack (int new_level) {
     if (v.level > new_level) {
       unassign (lit);
       unassigned++;
-      if (use_lsids()) bump_litscore(lit);
+      if (use_lsids()) bump_litscore(lit, bump_mult);
     } else {
       // This is the essence of the SAT'18 paper on chronological
       // backtracking.  It is possible to just keep out-of-order assigned

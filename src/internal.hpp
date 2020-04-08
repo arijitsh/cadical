@@ -323,7 +323,7 @@ struct Internal {
 
   bool use_lsids () const { return opts.chronophase == 1 ;}
 
-  void bump_litscore (int lit);
+  void bump_litscore (int lit, double mult);
   void bump_litscinc ();
   void lit_rescore ();
 

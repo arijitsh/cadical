@@ -215,7 +215,7 @@ void Internal::bump_litscore (int lit) {
   }
   assert (!isinf (new_score));
   LOG ("[LSIDS] new %g score of %d", new_score, lit);
-  lit_score (-lit) = new_score;      //TODO : This works.
+  lit_score (lit) = new_score;      //TODO : This works.
 }
 
 
@@ -236,7 +236,7 @@ void Internal::bump_literals () {
   // TODO : On bumping reason literals?
 
   for (const auto & lit : *conflict){
-    bump_literal(lit);
+    bump_literal(-lit);
   }
 
   if (use_lsids()) bump_litscinc ();

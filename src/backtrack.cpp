@@ -93,6 +93,7 @@ void Internal::backtrack (int new_level) {
     if (v.level > new_level) {
       unassign (lit);
       unassigned++;
+      if (use_lsids()) bump_litscore(lit);
     } else {
       // This is the essence of the SAT'18 paper on chronological
       // backtracking.  It is possible to just keep out-of-order assigned

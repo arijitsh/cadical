@@ -56,6 +56,10 @@ void Solver::transition_to_steady_state () {
     external->reset_assumptions ();
     external->reset_concluded ();
     external->reset_constraint ();
+  } else if (state () == INCONCLUSIVE) {
+    external->reset_assumptions ();
+    external->reset_concluded ();
+    external->reset_constraint ();
   }
   if (state () != STEADY)
     STATE (STEADY);
@@ -438,6 +442,17 @@ void Solver::reserve (int min_max_var) {
   LOG_API_CALL_END ("reserve", min_max_var);
 }
 
+int Solver::reserve_difference (int number_of_vars) {
+  TRACE ("reserve_difference", number_of_vars);
+  REQUIRE_VALID_STATE ();
+  transition_to_steady_state ();
+  external->reset_extended ();
+  int new_max_var = external->max_var + number_of_vars;
+  external->init (new_max_var);
+  LOG_API_CALL_END ("reserve_difference", number_of_vars);
+  return new_max_var;
+}
+
 /*------------------------------------------------------------------------*/
 #ifndef NTRACING
 
@@ -704,18 +719,20 @@ int Solver::propagate () {
   else if (res == 20)
     STATE (UNSATISFIED);
   else
-    STATE (STEADY);
+    STATE (INCONCLUSIVE);
   return res;
 }
 
-void Solver::get_entrailed_literals (std::vector<int> &entrailed) {
-  TRACE ("get_entrailed_literals");
-  REQUIRE_STEADY_STATE ();
+void Solver::implied (std::vector<int> &entrailed) {
+  TRACE ("implied");
+  REQUIRE_VALID_STATE ();
+  REQUIRE (state () == INCONCLUSIVE,
+           "can only get implied literals only in unknown state");
   external->conclude_unknown ();
-  external->get_entrailed_literals (entrailed);
+  external->implied (entrailed);
   if (tracing_nb_lidrup_env_var_method)
     flush_proof_trace (true);
-  LOG_API_CALL_RETURNS ("get_entrailed_literals", (int) entrailed.size ());
+  LOG_API_CALL_RETURNS ("implied", (int) entrailed.size ());
 }
 
 /*------------------------------------------------------------------------*/
@@ -730,7 +747,7 @@ int Solver::call_external_solve_and_check_results (bool preprocess_only) {
   else if (res == 20)
     STATE (UNSATISFIED);
   else
-    STATE (STEADY);
+    STATE (INCONCLUSIVE);
 #if 0 // EXPENSIVE ALTERNATIVE ASSUMPTION CHECKING
   // This checks that the set of failed assumptions form a core using the
   // external 'copy (...)' function to copy the solver, which can be trusted
@@ -743,7 +760,6 @@ int Solver::call_external_solve_and_check_results (bool preprocess_only) {
     Solver checker;
     // checking restored clauses does not work (because the clauses are not added)
     checker.set("checkproof", 1);
-    checker.set("lratexternal", 0);
     checker.set("lrat", 0);
     checker.prefix ("checker ");
     copy (checker);
@@ -755,11 +771,13 @@ int Solver::call_external_solve_and_check_results (bool preprocess_only) {
       FATAL ("copying assumption checker failed");
   }
 #endif
+#if 0 // was necessary when INCONCLUSIVE state did not exist
   if (!res) {
     external->reset_assumptions ();
     external->reset_constraint ();
     external->reset_concluded ();
   }
+#endif
   return res;
 }
 
@@ -1227,17 +1245,18 @@ bool Solver::disconnect_proof_tracer (FileTracer *tracer) {
 void Solver::conclude () {
   TRACE ("conclude");
   REQUIRE_VALID_STATE ();
-  REQUIRE (state () == UNSATISFIED || state () == SATISFIED ||
-               state () == STEADY,
-           "can only conclude in satisfied, unsatisfied or STEADY state");
+  REQUIRE (
+      state () == UNSATISFIED || state () == SATISFIED ||
+          state () == INCONCLUSIVE,
+      "can only conclude in satisfied, unsatisfied or inconclusive state");
   if (state () == UNSATISFIED)
     internal->conclude_unsat ();
   else if (state () == SATISFIED)
     external->conclude_sat ();
-  else if (state () == STEADY)
+  else if (state () == INCONCLUSIVE)
     external->conclude_unknown ();
   assert (state () == UNSATISFIED || state () == SATISFIED ||
-          state () == STEADY);
+          state () == INCONCLUSIVE);
   LOG_API_CALL_END ("conclude");
 }
 
@@ -1599,7 +1618,7 @@ struct WitnessWriter : public WitnessIterator {
     }
     return file->put ('0');
   }
-  bool witness (const vector<int> &c, const vector<int> &w, uint64_t) {
+  bool witness (const vector<int> &c, const vector<int> &w, int64_t) {
     if (!write (c))
       return false;
     if (!file->put (' '))
@@ -1662,7 +1681,7 @@ struct WitnessCopier : public WitnessIterator {
 
 public:
   WitnessCopier (External *d) : dst (d) {}
-  bool witness (const vector<int> &c, const vector<int> &w, uint64_t id) {
+  bool witness (const vector<int> &c, const vector<int> &w, int64_t id) {
     dst->push_external_clause_and_witness_on_extension_stack (c, w, id);
     return true;
   }

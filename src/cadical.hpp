@@ -121,20 +121,24 @@ enum Status {
 //        READY --------------------------> SOLVING
 //
 //                     (internal)
-//      SOLVING --------------------------> READY
+//      SOLVING --------------------------> SOLVED
 //
 //                val (non zero literal)
 //    SATISFIED --------------------------> SATISFIED
 //
-//               failed (non zero literal )
+//               failed (non zero literal)
 //  UNSATISFIED --------------------------> UNSATISFIED
+//
+//               implied (non zero literal)
+// INCONCLUSIVE --------------------------> INCONCLUSIVE
 //
 //                        delete
 //        VALID --------------------------> DELETING
 //
 // where
 //
-//        READY = CONFIGURING  | STEADY  | SATISFIED | UNSATISFIED
+//       SOLVED = SATISFIED    | UNSATISFIED | INCONCLUSIVE
+//        READY = CONFIGURING  | STEADY      | SOLVED
 //        VALID = READY        | ADDING
 //      INVALID = INITIALIZING | DELETING
 //
@@ -155,7 +159,7 @@ enum Status {
 // 'SATISFIED' state, while extracting failed assumptions with 'failed' only
 // in the 'UNSATISFIED' state.  Solving can only be started in the 'STEADY '
 // or 'CONFIGURING' state or after the previous call to 'solve' yielded an
-// 'STEADY , 'SATISFIED' or 'UNSATISFIED' state.
+// 'INCONCLUSIVE , 'SATISFIED' or 'UNSATISFIED' state.
 //
 // All literals have to be valid literals too, i.e., 32-bit integers
 // different from 'INT_MIN'.  If any of these requirements is violated the
@@ -176,18 +180,19 @@ enum Status {
 // States are represented by a bit-set in order to combine them.
 
 enum State {
-  INITIALIZING = 1, // during initialization (invalid)
-  CONFIGURING = 2,  // configure options (with 'set')
-  STEADY = 4,       // ready to call 'solve'
-  ADDING = 8,       // adding clause literals (zero missing)
-  SOLVING = 16,     // while solving (within 'solve')
-  SATISFIED = 32,   // satisfiable allows 'val'
-  UNSATISFIED = 64, // unsatisfiable allows 'failed'
-  DELETING = 128,   // during and after deletion (invalid)
+  INITIALIZING = 1,   // during initialization (invalid)
+  CONFIGURING = 2,    // configure options (with 'set')
+  STEADY = 4,         // ready to call 'solve'
+  ADDING = 8,         // adding clause literals (zero missing)
+  SOLVING = 16,       // while solving (within 'solve')
+  SATISFIED = 32,     // satisfiable allows 'val'
+  UNSATISFIED = 64,   // unsatisfiable allows 'failed'
+  DELETING = 128,     // during and after deletion (invalid)
+  INCONCLUSIVE = 256, // unknown allows 'implied'
 
   // These combined states are used to check contracts.
 
-  READY = CONFIGURING | STEADY | SATISFIED | UNSATISFIED,
+  READY = CONFIGURING | STEADY | SATISFIED | UNSATISFIED | INCONCLUSIVE,
   VALID = READY | ADDING,
   INVALID = INITIALIZING | DELETING
 };
@@ -212,7 +217,7 @@ class ClauseIterator;
 class WitnessIterator;
 class ExternalPropagator;
 class Tracer;
-class InternalTracer;
+struct InternalTracer;
 class FileTracer;
 class StatTracer;
 
@@ -279,7 +284,7 @@ public:
   //   20 = UNSATISFIABLE
   //
   //   require (READY)
-  //   ensure (STEADY  | SATISFIED | UNSATISFIED)
+  //   ensure (INCONCLUSIVE  | SATISFIED | UNSATISFIED)
   //
   // Note, that while in this call the solver actually transitions to state
   // 'SOLVING', which however is only visible from a different context,
@@ -288,7 +293,15 @@ public:
   //
   int solve ();
 
-  // Get value (-lit=false, lit=true) of valid non-zero literal.
+  // Get the value of a valid non-zero literal.  This follows the IPASIR
+  // semantics which says to return 'lit' if 'lit' is assigned to 'true' and
+  // '-lit' if 'lit' is assigned to false.  This has the consequence that
+  // the returned literal is always assigned to 'true' and thus might be a
+  // bit confusing.  To avoid the headache of these semantics (which we
+  // unfortunately should follow to be compatabile with IPASIR) the user can
+  // simply use positive variable indices instead of literals.  Then the
+  // returned integer is negative if the variable is assigned to 'false' and
+  // positive it is assigned to 'true'.
   //
   //   require (SATISFIED)
   //   ensure (SATISFIED)
@@ -475,8 +488,26 @@ public:
   // In any other case, the function returns 0 (indicating 'UNKNOWN') and
   // 'implicants' lists the non-conflicting current value of the trail.
 
+  // Returns
+  //
+  //    0 = UNKNOWN
+  //   10 = SATISFIABLE
+  //   20 = UNSATISFIABLE
+  //
+  // The 'UNKNOWN' result means that unit propagation did not lead to a
+  // conflict nor to a complete assignment, or limit reached or interrupted
+  // through 'terminate'.
+  //
+  //   require (READY)
+  //   ensure (INCONCLUSIVE  | SATISFIED | UNSATISFIED)
+  //
   int propagate ();
-  void get_entrailed_literals (std::vector<int> &implicants);
+
+  //
+  //   require (INCONCLUSIVE)
+  //   ensure (INCONCLUSIVE)
+  //
+  void implied (std::vector<int> &implicants);
 
   //------------------------------------------------------------------------
   // This function determines a good splitting literal.  The result can be
@@ -486,7 +517,7 @@ public:
   // returned but the state remains steady.
   //
   //   require (READY)
-  //   ensure (STEADY |SATISFIED|UNSATISFIED)
+  //   ensure (INCONCLUSIVE |SATISFIED|UNSATISFIED)
   //
   int lookahead (void);
 
@@ -541,6 +572,12 @@ public:
   // literal is used as an argument except for the functions 'val', 'fixed',
   // 'failed' and 'frozen'.  However, the library internally keeps a maximum
   // variable index, which can be queried.
+  // With factor (BVA) the solver might also add new variables. In that case
+  // the user is required to use this to check which variables are currently
+  // free before adding new variables of their own.
+  // The alternative is to reserve variables in batches with
+  // 'reserve_difference'. Using 'reserve' in combination with any technique
+  // that could add variables (currently only factor) is not advised.
   //
   //   require (VALID | SOLVING)
   //   ensure (VALID | SOLVING)
@@ -556,6 +593,18 @@ public:
   //   ensure (STEADY )
   //
   void reserve (int min_max_var);
+
+  // Increase the maximum variable index by a number of new variables.
+  // initializes 'number_of_vars' new variables and protects them from
+  // being used by the solver as extension variables (BVA).
+  // It returns the new maximum variable index which is the highest
+  // variable name of the consecutive range of newly reserved variables.
+  // It has the same state transition and conditions as 'reserve' above.
+  //
+  //   require (READY)
+  //   ensure (STEADY )
+  //
+  int reserve_difference (int number_of_vars);
 
 #ifndef NTRACING
   //------------------------------------------------------------------------
@@ -697,7 +746,7 @@ public:
   // propagation is performed, which both take some time.
   //
   //   require (READY)
-  //   ensure (STEADY  | SATISFIED | UNSATISFIED)
+  //   ensure (INCONCLUSIVE  | SATISFIED | UNSATISFIED)
   //
   int simplify (int rounds = 3);
 
@@ -705,7 +754,7 @@ public:
   // Force termination of 'solve' asynchronously.
   //
   //  require (SOLVING | READY)
-  //  ensure (STEADY )           // actually not immediately (synchronously)
+  //  ensure (INCONCLUSIVE )     // actually not immediately (synchronously)
   //
   void terminate ();
 
@@ -1294,7 +1343,7 @@ public:
   virtual ~WitnessIterator () {}
   virtual bool witness (const std::vector<int> &clause,
                         const std::vector<int> &witness,
-                        uint64_t id = 0) = 0;
+                        int64_t id = 0) = 0;
 };
 
 /*------------------------------------------------------------------------*/

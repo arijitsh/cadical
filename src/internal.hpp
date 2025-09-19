@@ -36,6 +36,8 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 
+#include "gaussian.hpp"
+
 /*------------------------------------------------------------------------*/
 
 // All internal headers are included here.  This gives a nice overview on
@@ -237,6 +239,7 @@ struct Internal {
   Clause *ignore;               // ignored during 'vivify_propagate'
   Clause *dummy_binary;         // Dummy binary clause for subsumption
   Clause *external_reason;      // used as reason at external propagations
+  Clause *gauss_conflict;       // used for Gaussian elimination conflicts
   Clause *newest_clause;        // used in external_propagate
   bool force_no_backtrack;      // for new clauses with external propagator
   bool from_propagator;         // differentiate new clauses...
@@ -317,6 +320,7 @@ struct Internal {
 
   const Range vars; // Provides safe variable iteration.
   const Sange lits; // Provides safe literal iteration.
+  Gaussian *gauss;  // Gaussian elimination engine
 
   /*----------------------------------------------------------------------*/
 
@@ -343,6 +347,9 @@ struct Internal {
 
   // Reserve ids for original clauses to produce lrat
   void reserve_ids (int number);
+
+  void add_xor_clause (const std::vector<int> &lits);
+  Clause *gaussian_conflict();
 
   // Enlarge tables.
   //

@@ -344,12 +344,15 @@ Solver::Solver () {
 
   adding_clause = false;
   adding_constraint = false;
+  adding_xor = false;
   _state = INITIALIZING;
   internal = new Internal ();
   DeferDeletePtr<Internal> delete_internal (internal);
   TRACE ("init");
   external = new External (internal);
   DeferDeletePtr<External> delete_external (external);
+  gauss = new Gaussian ();
+  internal->gauss = gauss;
   STATE (CONFIGURING);
 #ifndef NTRACING
   if (tracing_api_calls_through_environment_variable_method)
@@ -396,6 +399,7 @@ Solver::~Solver () {
   string prefix = internal->prefix;
 #endif
 
+  delete gauss;
   delete internal;
   delete external;
 
@@ -580,9 +584,24 @@ void Solver::add (int lit) {
   adding_clause = lit;
   if (adding_clause)
     STATE (ADDING);
-  else if (!adding_constraint)
+  else if (!adding_constraint && !adding_xor)
     STATE (STEADY);
   LOG_API_CALL_END ("add", lit);
+}
+
+void Solver::add_xor (int lit) {
+  TRACE ("add_xor", lit);
+  REQUIRE_VALID_STATE (); 
+  if (lit)
+    REQUIRE_VALID_LIT (lit);
+  transition_to_steady_state (); 
+  external->add_xor (lit);
+  adding_xor = lit;
+  if (adding_xor)
+    STATE (ADDING);
+  else if (!adding_clause && !adding_constraint)
+    STATE (STEADY);
+  LOG_API_CALL_END ("add_xor", lit);
 }
 
 void Solver::clause (int a) {
@@ -652,7 +671,7 @@ void Solver::constrain (int lit) {
   adding_constraint = lit;
   if (adding_constraint)
     STATE (ADDING);
-  else if (!adding_clause)
+  else if (!adding_clause && !adding_xor)
     STATE (STEADY);
   LOG_API_CALL_END ("constrain", lit);
 }

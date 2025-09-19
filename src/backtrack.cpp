@@ -152,6 +152,10 @@ void Internal::backtrack_without_updating_phases (int new_level) {
   if (no_conflict_until > assigned)
     no_conflict_until = assigned;
 
+  if (gauss) {
+    // simple Gaussian module does not require backtracking maintenance
+  }
+
   propergated = 0; // Always go back to root-level.
 
   assert (notified <= assigned + reassigned);

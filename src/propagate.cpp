@@ -487,6 +487,10 @@ bool Internal::propagate () {
   }
 
   STOP (propagate);
+  if (!conflict && gauss) {
+    if (Clause *c = gaussian_conflict ())
+      conflict = c;
+  }
 
   return !conflict;
 }

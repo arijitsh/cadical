@@ -1,4 +1,7 @@
 #include "internal.hpp"
+#include "gaussian.hpp"
+#include <cstring>
+#include <iostream>
 
 namespace CaDiCaL {
 
@@ -12,25 +15,25 @@ Internal::Internal ()
       searching_lucky_phases (false), stable (false), reported (false),
       external_prop (false), did_external_prop (false),
       external_prop_is_lazy (true), forced_backt_allowed (false),
-
       private_steps (false), rephased (0), vsize (0), max_var (0),
       clause_id (0), original_id (0), reserved_ids (0), conflict_id (0),
-      saved_decisions (0), concluded (false), lrat (false), frat (false),
-      level (0), vals (0), score_inc (1.0), scores (this), conflict (0),
-      ignore (0), external_reason (&external_reason_clause),
-      newest_clause (0), force_no_backtrack (false),
-      from_propagator (false), ext_clause_forgettable (false),
-      tainted_literal (0), notified (0), probe_reason (0), propagated (0),
-      propagated2 (0), propergated (0), best_assigned (0),
-      target_assigned (0), no_conflict_until (0), unsat_constraint (false),
-      marked_failed (true), sweep_incomplete (false), citten (0),
-      num_assigned (0), proof (0), opts (this),
+      concluded (false), lrat (false), frat (false), level (0), vals (0),
+      score_inc (1.0), scores (this), conflict (0), ignore (0),
+      external_reason (&external_reason_clause), gauss_conflict (0),
+      newest_clause (0),
+      force_no_backtrack (false), from_propagator (false),
+      ext_clause_forgettable (false), tainted_literal (0), notified (0),
+      probe_reason (0), propagated (0), propagated2 (0), propergated (0),
+      best_assigned (0), target_assigned (0), no_conflict_until (0),
+      unsat_constraint (false), marked_failed (true), 
+      sweep_incomplete (false), citten (0), num_assigned (0),
+      proof (0), opts (this),
 #ifndef QUIET
       profiles (this), force_phase_messages (false),
 #endif
       arena (this), prefix ("c "), internal (this), external (0),
       termination_forced (false), vars (this->max_var),
-      lits (this->max_var) {
+      lits (this->max_var), gauss (nullptr) {
   control.push_back (Level (0, 0));
 
   // The 'dummy_binary' is used in 'try_to_subsume_clause' to fake a real
@@ -111,6 +114,8 @@ void Internal::enlarge_vals (size_t new_vsize) {
     assert (!vsize);
   vals = new_vals;
 }
+
+/*------------------------------------------------------------------------*/
 
 /*------------------------------------------------------------------------*/
 
@@ -210,6 +215,63 @@ void Internal::add_original_lit (int lit) {
     add_new_original_clause (id);
     original.clear ();
   }
+}
+
+void Internal::add_xor_clause (const vector<int> &lits) {
+  if (!gauss)
+    gauss = new Gaussian ();
+  Gaussian::Xor clause;
+  int maxv = max_var;
+  for (int lit : lits) {
+    if (!lit)
+      continue;
+    int v = abs (lit);
+    if (v > maxv)
+      maxv = v;
+    clause.vars.push_back (v);
+    if (lit < 0)
+      clause.rhs = !clause.rhs;
+  }
+  if (maxv > max_var)
+    enlarge (maxv);
+  gauss->add_clause (clause);
+}
+
+Clause *Internal::gaussian_conflict () {
+  if (!gauss || gauss->empty ())
+    return nullptr;
+
+  for (const auto &eq : gauss->clauses ()) {
+    bool parity = eq.rhs;
+    bool all_assigned = true;
+    for (int v : eq.vars) {
+      int val = this->val (v);
+      if (!val) {
+        all_assigned = false;
+        break;
+      }
+      if (val > 0)
+        parity = !parity;
+    }
+    if (all_assigned && parity) {
+      size_t size = eq.vars.size ();
+      size_t bytes = Clause::bytes (size);
+      Clause *c = (Clause *) new char[bytes];
+      memset (c, 0, bytes);
+      c->size = size;
+      c->pos = 2;
+      for (size_t i = 0; i < size; i++) {
+        int v = eq.vars[i];
+        int val = this->val (v);
+        c->literals[i] = val > 0 ? -v : v;
+      }
+      watch_clause (c);
+      gauss_conflict = c;
+      return gauss_conflict;
+    }
+  }
+
+  return nullptr;
 }
 
 void Internal::finish_added_clause_with_id (int64_t id, bool restore) {
@@ -585,12 +647,10 @@ void Internal::init_search_limits () {
   } else
     LOG ("keeping non-stable phase");
 
-  if (!incremental) {
-    inc.stabilize = 0;
-    lim.stabilize = stats.conflicts + opts.stabilizeinit;
-    LOG ("initial stabilize limit %" PRId64 " after %d conflicts",
-         lim.stabilize, (int) opts.stabilizeinit);
-  }
+  inc.stabilize = opts.stabilizeinit;
+  lim.stabilize = stats.conflicts + inc.stabilize;
+  LOG ("new stabilize limit %" PRId64 " after %" PRId64 " conflicts",
+       lim.stabilize, inc.stabilize);
 
   if (opts.stabilize && opts.reluctant) {
     LOG ("new restart reluctant doubling sequence period %d",
@@ -887,6 +947,7 @@ int Internal::local_search () {
 
 // if preprocess_only is false and opts.ilb is true we do not preprocess
 // such that we do not have to backtrack to level 0.
+// TODO: check restore_clauses works on higher level
 //
 int Internal::solve (bool preprocess_only) {
   assert (clause.empty ());

@@ -321,6 +321,10 @@ run add32 20
 run add64 20
 run add128 20
 
+# XOR tests currently disabled until lrat-trim supports 'x' clauses
+#run xor0 10
+#run xor1 20
+
 run prime65537 20
 
 #--------------------------------------------------------------------------#

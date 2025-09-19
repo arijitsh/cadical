@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include "gaussian.hpp"
 
 namespace CaDiCaL {
 
@@ -233,6 +234,11 @@ public:
   Solver ();
   ~Solver ();
 
+  // Access to the simple Gaussian elimination module used for XOR
+  // constraints.  The pointer is exposed to the parser to feed parsed XOR
+  // clauses directly when needed.
+  Gaussian *getGauss() const { return gauss; }
+
   static const char *signature (); // name of this library
 
   // Core functionality as in the IPASIR incremental SAT solver interface.
@@ -247,6 +253,8 @@ public:
   //   if (!lit) ensure (STEADY )       // and thus READY
   //
   void add (int lit);
+  // Add XOR literal; terminated by zero to finalize XOR clause.
+  void add_xor (int lit);
 
   // Here are functions simplifying clause addition. The given literals
   // should all be valid (different from 'INT_MIN' and different from '0').
@@ -992,10 +1000,11 @@ public:
 private:
   //==== start of state ====================================================
 
-  // The solver is in the state ADDING if either the current clause or the
-  // constraint (or both) is not yet terminated.
+  // The solver is in the state ADDING if either the current clause, an XOR
+  // clause, or the constraint (or all) is not yet terminated.
   bool adding_clause;
   bool adding_constraint;
+  bool adding_xor;
 
   State _state; // API states as discussed above.
 
@@ -1037,6 +1046,7 @@ private:
   //
   Internal *internal; // Hidden internal solver.
   External *external; // Hidden API to internal solver mapping.
+  Gaussian *gauss; // Gaussian elimination engine
 
   friend class Testing; // Access to 'internal' for testing only!
 

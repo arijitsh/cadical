@@ -1276,6 +1276,12 @@ void Internal::analyze () {
   clear_analyzed_levels ();
   clause.clear ();
   conflict = 0;
+  if (gauss_conflict) {
+    remove_watch (watches (gauss_conflict->literals[0]), gauss_conflict);
+    remove_watch (watches (gauss_conflict->literals[1]), gauss_conflict);
+    deallocate_clause (gauss_conflict);
+    gauss_conflict = 0;
+  }
 
   lrat_chain.clear ();
   STOP (analyze);

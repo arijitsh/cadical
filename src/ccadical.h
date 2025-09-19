@@ -19,6 +19,7 @@ CCaDiCaL *ccadical_init (void);
 void ccadical_release (CCaDiCaL *);
 
 void ccadical_add (CCaDiCaL *, int lit);
+void ccadical_add_xor (CCaDiCaL *, int lit);
 void ccadical_assume (CCaDiCaL *, int lit);
 int ccadical_solve (CCaDiCaL *);
 int ccadical_val (CCaDiCaL *, int lit);

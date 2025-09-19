@@ -99,6 +99,10 @@ void ccadical_add (CCaDiCaL *wrapper, int lit) {
   ((Wrapper *) wrapper)->solver->add (lit);
 }
 
+void ccadical_add_xor (CCaDiCaL *wrapper, int lit) {
+  ((Wrapper *) wrapper)->solver->add_xor (lit);
+}
+
 void ccadical_assume (CCaDiCaL *wrapper, int lit) {
   ((Wrapper *) wrapper)->solver->assume (lit);
 }

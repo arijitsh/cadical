@@ -64,6 +64,9 @@ struct External {
 
   vector<int> assumptions; // External assumptions.
   vector<int> constraint;  // External constraint. Terminated by zero.
+  // XOR clauses stored separately.
+  vector<int> xor_clause;               // currently added XOR clause
+  vector<vector<int>> xor_clauses;      // all added XOR clauses
 
   vector<int64_t>
       ext_units; // External units. Needed to compute LRAT for eclause
@@ -311,6 +314,7 @@ struct External {
   // Proxies to IPASIR functions.
 
   void add (int elit);
+  void add_xor (int elit);
   void assume (int elit);
   int solve (bool preprocess_only);
 

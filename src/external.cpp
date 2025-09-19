@@ -220,6 +220,17 @@ void External::add (int elit) {
     eclause.clear ();
 }
 
+void External::add_xor (int elit) {
+  assert (elit != INT_MIN);
+  reset_extended ();
+  xor_clause.push_back (elit);
+  if (!elit) {
+    xor_clauses.push_back (xor_clause);
+    internal->add_xor_clause (xor_clause);
+    xor_clause.clear ();
+  }
+}
+
 void External::assume (int elit) {
   assert (elit);
   reset_extended ();

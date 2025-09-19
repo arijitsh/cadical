@@ -244,6 +244,35 @@ const char *Parser::parse_dimacs_non_profiled (int &vars, int strict) {
         break;
       continue;
     }
+    if (ch == 'x') {
+      int xlitch = parse_char (); // first char after 'x'
+      int xlit = 0;
+      for (;;) {
+        while (xlitch == ' ' || xlitch == '\t' || xlitch == '\r')
+          xlitch = parse_char ();
+        if (xlitch == 'c') {
+          while ((xlitch = parse_char ()) != '\n' && xlitch != EOF)
+            ;
+          if (xlitch == EOF)
+            break;
+          xlitch = parse_char ();
+          continue;
+        }
+        const char *err = parse_lit (xlitch, xlit, vars, strict);
+        if (err)
+          return err;
+        if (xlitch == 'c') {
+          while ((xlitch = parse_char ()) != '\n')
+            if (xlitch == EOF)
+              PER ("unexpected end-of-file in comment");
+        }
+        solver->add_xor (xlit);
+        if (!xlit)
+          break;
+        xlitch = parse_char ();
+      }
+      continue;
+    }
     if (ch == 'a' && found_inccnf_header)
       break;
     const char *err = parse_lit (ch, lit, vars, strict);

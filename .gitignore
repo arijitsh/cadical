@@ -2,3 +2,8 @@ build
 makefile
 .aider*
 *~
+/result
+.cache
+*.json
+/build-release
+/build-static

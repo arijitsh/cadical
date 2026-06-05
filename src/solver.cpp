@@ -354,16 +354,7 @@ static atomic<bool> tracing_api_calls_through_environment_variable_method{
 #endif
 /*------------------------------------------------------------------------*/
 
-// The global 'tracing_nb_lidrup_env_var_method' flag is used to ensure that
-// only one solver produces a proof file. Otherwise the method to use an
-// environment variable to point to the trace file is bogus, since those
-// different solver instances would all write to the same file producing
-// garbage. See also the comment on
-// `tracing_api_calls_through_environment_variable_method` above.
-//
-static atomic<bool> tracing_nb_lidrup_env_var_method{false};
-
-Solver::Solver () {
+Solver::Solver () : tracing_nb_lidrup_env_var_method(false) {
 
 #ifndef NTRACING
   const char *path = getenv ("CADICAL_API_TRACE");
@@ -1197,6 +1188,14 @@ int64_t Solver::irredundant () const {
   return res;
 }
 
+int64_t Solver::conflicts () const {
+  TRACE ("conflicts");
+  REQUIRE_VALID_OR_SOLVING_STATE ();
+  int64_t res = internal->stats.conflicts;
+  LOG_API_CALL_RETURNS ("conflicts", res);
+  return res;
+}
+
 /*------------------------------------------------------------------------*/
 
 void Solver::freeze (int lit) {
@@ -1619,6 +1618,14 @@ bool Solver::traverse_clauses (ClauseIterator &it) const {
   return res;
 }
 
+bool Solver::traverse_red_clauses (ClauseIterator &it) const {
+  LOG_API_CALL_BEGIN ("traverse_red_clauses");
+  REQUIRE_VALID_STATE ();
+  bool res = internal->traverse_red_clauses (it);
+  LOG_API_CALL_RETURNS ("traverse_red_clauses", res);
+  return res;
+}
+
 bool Solver::traverse_witnesses_backward (WitnessIterator &it) const {
   LOG_API_CALL_BEGIN ("traverse_witnesses_backward");
   REQUIRE_VALID_STATE ();
@@ -1635,6 +1642,13 @@ bool Solver::traverse_witnesses_forward (WitnessIterator &it) const {
              external->traverse_all_non_frozen_units_as_witnesses (it);
   LOG_API_CALL_RETURNS ("traverse_witnesses_forward", res);
   return res;
+}
+
+const std::vector<std::pair<int,int>>& Solver::get_eqiv_lits () const {
+  LOG_API_CALL_BEGIN ("get_eqiv_lits");
+  REQUIRE_VALID_STATE ();
+  LOG_API_CALL_RETURNS ("get_eqiv_lits", res);
+  return external->eqLits;
 }
 
 /*------------------------------------------------------------------------*/

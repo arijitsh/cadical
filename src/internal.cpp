@@ -99,14 +99,12 @@ Internal::~Internal () {
 // by static analyzers though.  Clang with '--analyze' thought that this
 // idiom would generate a memory leak thus we use the following dummy.
 
-static signed char *ignore_clang_analyze_memory_leak_warning;
 
 void Internal::enlarge_vals (size_t new_vsize) {
   signed char *new_vals;
   const size_t bytes = 2u * new_vsize;
   new_vals = new signed char[bytes]; // g++-4.8 does not like ... { 0 };
   memset (new_vals, 0, bytes);
-  ignore_clang_analyze_memory_leak_warning = new_vals;
   new_vals += new_vsize;
 
   if (vals) {
@@ -1282,6 +1280,34 @@ bool Internal::traverse_clauses (ClauseIterator &it) {
     if (c->garbage)
       continue;
     if (c->redundant)
+      continue;
+    bool satisfied = false;
+    for (const auto &ilit : *c) {
+      const int tmp = fixed (ilit);
+      if (tmp > 0) {
+        satisfied = true;
+        break;
+      }
+      if (tmp < 0)
+        continue;
+      const int elit = externalize (ilit);
+      eclause.push_back (elit);
+    }
+    if (!satisfied && !it.clause (eclause))
+      return false;
+    eclause.clear ();
+  }
+  return true;
+}
+
+bool Internal::traverse_red_clauses (ClauseIterator &it) {
+  vector<int> eclause;
+  if (unsat)
+    return it.clause (eclause);
+  for (const auto &c : clauses) {
+    if (c->garbage)
+      continue;
+    if (!c->redundant)
       continue;
     bool satisfied = false;
     for (const auto &ilit : *c) {

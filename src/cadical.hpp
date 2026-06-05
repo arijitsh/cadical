@@ -797,6 +797,15 @@ public:
   int64_t redundant () const;   // Number of active redundant clauses.
   int64_t irredundant () const; // Number of active irredundant clauses.
 
+  // Cumulative number of conflicts generated during search, as also
+  // reported by 'statistics ()'.  Valid both in 'VALID' and 'SOLVING'
+  // state so it can be queried after (or between) 'solve' calls.
+  //
+  //   require (VALID | SOLVING)
+  //   ensure (VALID | SOLVING)
+  //
+  int64_t conflicts () const;
+
   //------------------------------------------------------------------------
   // This function executes the given number of preprocessing rounds. It is
   // similar to 'solve' with 'limits ("preprocessing", rounds)' except that
@@ -990,8 +999,10 @@ public:
   //   ensure (VALID)
   //
   bool traverse_clauses (ClauseIterator &) const;
+  bool traverse_red_clauses (ClauseIterator &) const;
   bool traverse_witnesses_backward (WitnessIterator &) const;
   bool traverse_witnesses_forward (WitnessIterator &) const;
+  const std::vector<std::pair<int,int>>& get_eqiv_lits () const;
 
   //------------------------------------------------------------------------
   // Files with explicit path argument support compressed input and output
@@ -1127,6 +1138,8 @@ private:
   void trace_api_call (const char *, const char *) const;
   void trace_api_call (const char *, const char *, int) const;
 #endif
+
+  bool tracing_nb_lidrup_env_var_method; // Non-binary LIDRUP tracing via env var
 
   void transition_to_steady_state ();
 

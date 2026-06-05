@@ -232,6 +232,16 @@ void External::add (int elit) {
     eclause.clear ();
 }
 
+void External::add_xor (int elit) {
+  assert (elit != INT_MIN);
+  if (elit) {
+    xor_clause.push_back (elit);
+    return;
+  }
+  add_xor_clause (xor_clause);
+  xor_clause.clear ();
+}
+
 void External::add_xor_clause (const vector<int> &elits) {
   // Validate the literals (same constraints as ordinary clause literals).
   for (int elit : elits) {

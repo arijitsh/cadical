@@ -664,6 +664,22 @@ void Solver::add_xor_clause (const std::vector<int> &lits) {
   LOG_API_CALL_END ("add_xor_clause");
 }
 
+// Streaming, 0-terminated XOR API matching sc2025's 'add_xor (int)'.  The
+// literal buffer lives in 'External' (reached through the 'external' pointer)
+// so that 'sizeof (Solver)' is unchanged -- callers compiled against a header
+// without this method (e.g. cvc5 against the sc2025 header) stay ABI
+// compatible.  A '0' terminator flushes the buffered literals as one XOR.
+void Solver::add_xor (int lit) {
+  LOG_API_CALL_BEGIN ("add_xor");
+  REQUIRE_VALID_STATE ();
+  if (lit)
+    REQUIRE_VALID_LIT (lit);
+  transition_to_steady_state ();
+  external->add_xor (lit);
+  STATE (STEADY);
+  LOG_API_CALL_END ("add_xor");
+}
+
 void Solver::clause (int a) {
   REQUIRE_VALID_LIT (a);
   add (a), add (0);
@@ -910,6 +926,8 @@ int Solver::val (
   assert (res == lit || res == -lit);
   return res;
 }
+
+int Solver::val (int lit) { return val (lit, true); }
 
 bool Solver::flip (int lit) {
   TRACE ("flip", lit);

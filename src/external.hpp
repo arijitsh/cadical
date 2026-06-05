@@ -65,6 +65,7 @@ struct External {
 
   vector<int> assumptions; // External assumptions.
   vector<int> constraint;  // External constraint. Terminated by zero.
+  vector<int> xor_clause;  // XOR being streamed via 'add_xor'. Zero flushes it.
 
   // Stored XOR constraints (external literals, NOT zero-terminated). Each
   // entry encodes  XOR(literals) == true  (CMS semantics: a negative literal
@@ -323,6 +324,9 @@ struct External {
   // with the CMS convention  XOR(literals) == true.  Stores it for the GJ
   // engine and, if 'opts.xorblast' is set, blasts it to CNF via 'add'.
   void add_xor_clause (const vector<int> &elits);
+  // Streaming, 0-terminated XOR API: buffer 'elit' (or flush on 0) into one
+  // 'add_xor_clause' call.  Matches the sc2025 'add_xor (int)' convention.
+  void add_xor (int elit);
   void assume (int elit);
   int solve (bool preprocess_only);
 

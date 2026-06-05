@@ -275,6 +275,12 @@ public:
   //
   void add_xor_clause (const std::vector<int> &lits);
 
+  // Streaming, 0-terminated XOR API (matches the sc2025 CaDiCaL signature so
+  // that callers compiled against it, e.g. cvc5's prop layer, link cleanly).
+  // Push literals one at a time; a '0' terminator flushes them through
+  // 'add_xor_clause'.
+  void add_xor (int lit);
+
   // Here are functions simplifying clause addition. The given literals
   // should all be valid (different from 'INT_MIN' and different from '0').
   //
@@ -335,7 +341,11 @@ public:
   //
   int val (
       int lit,
-      bool use_default_value_for_declared_but_not_used_variable = true);
+      bool use_default_value_for_declared_but_not_used_variable);
+
+  // 1-arg overload matching the sc2025 CaDiCaL signature ('int val (int)') so
+  // callers compiled against it (e.g. cvc5's prop layer) link cleanly.
+  int val (int lit);
 
   // Try to flip the value of the given literal without falsifying the
   // formula.  Returns 'true' if this was successful. Otherwise the model is

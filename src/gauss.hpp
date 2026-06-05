@@ -4,48 +4,53 @@
 #include <cstdint>
 #include <vector>
 
+#include "gauss/packed_matrix.hpp"
+
 namespace CaDiCaL {
 
-// Search-time state of the Gauss-Jordan XOR engine.
+// State of the Gauss-Jordan XOR engine.
 //
 // The input XOR constraints are reduced once to row echelon form at the start
-// of solving (in 'Internal::init_gauss').  After that reduction every row is a
-// linear (GF(2)) combination of the original XORs and is therefore itself a
-// valid XOR constraint.  We keep, for every row with at least two variables,
-// the list of its internal variable indices and its target parity ('rhs').
+// of solving; unit / empty rows are dealt with at the root level and the
+// remaining multi-variable rows are kept (their bit pattern in 'base', their
+// variables in 'row_vars', their target parity in 'row_rhs').
 //
-// During search 'Internal::gauss_round' simply re-evaluates each stored row
-// against the current assignment ('val'): a row with exactly one unassigned
-// variable propagates it; a fully assigned row with the wrong parity is a
-// conflict.  Propagations and conflicts are explained with a real CaDiCaL
-// clause (one clause of the row's CNF expansion, selected by the assignment),
-// so the existing conflict-analysis / backtracking machinery is reused
-// unchanged.  Because the rows are static, no backtrack hook is required.
+// During search 'Internal::gauss_round' performs *full* Gaussian elimination
+// of the rows over the currently unassigned columns (a fresh copy in 'work').
+// Reducing over the unassigned columns exposes every variable that the linear
+// system forces under the current partial assignment, and every linear
+// combination of rows that has become contradictory -- i.e. it has the full
+// propagation strength of Gaussian reasoning, not just per-row XOR-unit
+// propagation.  The computation is stateless (it reads 'val' and rebuilds
+// 'work' each time), so no backtrack bookkeeping is needed; it is only redone
+// when an assignment to a matrix variable has changed since the last round.
 //
-// This is the correct-but-unoptimised engine; the watched-column incremental
-// elimination (Han-Jiang / CryptoMiniSat EGaussian) is a later performance
-// layer on top of the same validated matrix core.
+// Propagations and conflicts are explained with a real CaDiCaL clause (one
+// clause of the responsible row's CNF expansion, selected by the assignment),
+// so conflict analysis / backtracking are reused unchanged.
 struct GaussMatrix {
-  // For each active row (>= 2 variables): its internal variable indices.
-  std::vector<std::vector<int>> row_vars;
-  // Target parity (0/1) for each active row, aligned with 'row_vars'.
-  std::vector<signed char> row_rhs;
+  // Active rows after the initial reduction: bit matrix and metadata.
+  Gauss::PackedMatrix base; // num_rows x num_cols, initial reduced rows
+  uint32_t num_rows = 0;
+  uint32_t num_cols = 0;
 
-  // Occurrence index: 'var_rows[v]' lists the active rows containing internal
-  // variable 'v' (sized max_var+1).  Used to examine, on each new assignment,
-  // only the rows that variable participates in instead of all rows.
-  std::vector<std::vector<int>> var_rows;
+  std::vector<int> col_to_var;        // column -> internal variable index
+  std::vector<int> var_to_col;        // internal var -> column (-1 if none)
+  std::vector<std::vector<int>> row_vars; // variables of each active row
+  std::vector<signed char> row_rhs;       // target parity of each active row
 
-  // Position on the solver trail up to which assignments have already been fed
-  // to the engine.  Clamped down on backtrack (the trail shrinks); evaluation
-  // is stateless (reads 'val'), so re-assigned variables are simply
-  // re-examined.
+  // Scratch reused across rounds.
+  Gauss::PackedMatrix work; // working copy that gets eliminated
+  Gauss::PackedMatrix aux;  // two rows: aux[0]=cols_vals, aux[1]=cols_unset
+  std::vector<int> reason;  // clause buffer
+
+  // Change detection: trail position consumed and last seen trail size.
   size_t qhead = 0;
-
-  // Scratch buffer reused while building reason / conflict clauses.
-  std::vector<int> reason;
+  size_t last_trail = 0;
+  bool need_round = true;
 
   // Statistics.
+  int64_t rounds = 0;
   int64_t propagations = 0;
   int64_t conflicts = 0;
 };

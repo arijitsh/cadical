@@ -149,12 +149,28 @@ void Internal::init_gauss () {
     gauss->row_rhs.push_back ((signed char) rhs);
   }
 
-  // Build the variable -> rows occurrence index for incremental evaluation.
-  gauss->var_rows.assign (max_var + 1, {});
-  for (size_t r = 0; r < gauss->row_vars.size (); r++)
-    for (const int v : gauss->row_vars[r])
-      gauss->var_rows[v].push_back ((int) r);
+  // Persist the column maps and build the active-row bit matrix 'base' plus the
+  // scratch matrices used by 'gauss_round'.
+  gauss->num_cols = num_cols;
+  gauss->col_to_var = col_to_var;
+  gauss->var_to_col = std::move (var_to_col);
+  const uint32_t active = (uint32_t) gauss->row_vars.size ();
+  gauss->num_rows = active;
+  if (active) {
+    gauss->base.resize (active, num_cols);
+    for (uint32_t r = 0; r < active; r++) {
+      Gauss::PackedRow pr = gauss->base[r];
+      pr.setZero ();
+      pr.rhs () = gauss->row_rhs[r];
+      for (const int v : gauss->row_vars[r])
+        pr.setBit ((uint32_t) gauss->var_to_col[v]);
+    }
+    gauss->work.resize (active, num_cols);
+  }
+  gauss->aux.resize (2, num_cols); // aux[0]=cols_vals, aux[1]=cols_unset
   gauss->qhead = 0;
+  gauss->last_trail = trail.size ();
+  gauss->need_round = true;
 
   // After preprocessing the watch lists may be disconnected.  Reconnect them
   // so that (a) the unit literals just assigned by 'assign_unit' are actually
@@ -273,65 +289,118 @@ bool Internal::gauss_check_model () {
   return true;
 }
 
-// Evaluate a single active row against the current assignment.  Propagates the
-// unique unassigned literal (if any) or sets 'conflict' if the row is fully
-// assigned with the wrong parity.  Returns true if it propagated a literal.
-bool Internal::gauss_eval_row (size_t r) {
-  const std::vector<int> &vars = gauss->row_vars[r];
-  int count_unassigned = 0;
-  int unassigned_var = 0;
-  int assigned_parity = 0;
-  for (const int v : vars) {
-    const signed char s = val (v);
-    if (!s) {
-      if (++count_unassigned >= 2)
-        return false; // not unit yet, nothing to do
-      unassigned_var = v;
-    } else if (s > 0)
-      assigned_parity ^= 1;
-  }
-  if (count_unassigned == 1) {
-    const int want = gauss->row_rhs[r] ^ assigned_parity; // value of last var
-    const int forced = want ? unassigned_var : -unassigned_var;
-    Clause *reason = gauss_build_clause (vars, forced, unassigned_var);
-    search_assign_driving (forced, reason);
-    gauss->propagations++;
-    return true;
-  }
-  // fully assigned
-  if (assigned_parity != gauss->row_rhs[r]) {
-    conflict = gauss_build_clause (vars, 0, 0);
-    gauss->conflicts++;
-  }
-  return false;
-}
-
-// Incrementally feed newly assigned trail literals to the matrix: for every
-// assignment since the last call, examine only the rows that contain that
-// variable.  Returns true if at least one literal was propagated (so the
-// caller should re-run BCP); sets 'conflict' on a falsified row.
+// Full Gaussian elimination of the active rows over the currently unassigned
+// columns.  This exposes every variable the linear system forces under the
+// current partial assignment, plus every contradictory linear combination --
+// the full strength of Gaussian reasoning.  Stateless: it reads 'val' and
+// rebuilds the working matrix, so backtracking needs no bookkeeping.  Only run
+// when an assignment to a matrix variable changed since the last round.
 bool Internal::gauss_round () {
 
-  if (!gauss)
+  if (!gauss || !gauss->num_rows)
     return false;
 
-  // The trail may have shrunk due to backtracking since the last call.
-  if (gauss->qhead > trail.size ())
-    gauss->qhead = trail.size ();
-
-  bool progress = false;
-  while (!conflict && gauss->qhead < trail.size ()) {
-    const int lit = trail[gauss->qhead++];
-    const int v = (lit < 0) ? -lit : lit;
-    if (v >= (int) gauss->var_rows.size ())
-      continue;
-    for (const int r : gauss->var_rows[v]) {
-      if (gauss_eval_row ((size_t) r))
-        progress = true;
-      if (conflict)
-        break;
+  // Change detection.
+  const size_t tsz = trail.size ();
+  if (tsz < gauss->last_trail) {
+    gauss->need_round = true; // backtracked: the assignment changed
+    gauss->qhead = tsz;
+  } else {
+    while (gauss->qhead < tsz) {
+      const int lit = trail[gauss->qhead++];
+      const int v = (lit < 0) ? -lit : lit;
+      if (v <= max_var && gauss->var_to_col[v] >= 0)
+        gauss->need_round = true; // a matrix variable was assigned
     }
   }
+  gauss->last_trail = tsz;
+  if (!gauss->need_round)
+    return false;
+  gauss->need_round = false;
+  gauss->rounds++;
+
+  const uint32_t nc = gauss->num_cols;
+  const uint32_t nr = gauss->num_rows;
+
+  // Current assignment over the columns.
+  Gauss::PackedRow cols_vals = gauss->aux[0];
+  Gauss::PackedRow cols_unset = gauss->aux[1];
+  cols_vals.setZero ();
+  cols_unset.setZero ();
+  for (uint32_t c = 0; c < nc; c++) {
+    const signed char s = val (gauss->col_to_var[c]);
+    if (!s)
+      cols_unset.setBit (c);
+    else if (s > 0)
+      cols_vals.setBit (c);
+  }
+
+  // Fresh working copy of the active rows.
+  for (uint32_t r = 0; r < nr; r++)
+    gauss->work[r] = gauss->base[r];
+
+  // Reduced Gaussian elimination, pivoting ONLY on unassigned columns (so each
+  // unassigned pivot column is isolated to a single row, while the assigned
+  // columns are kept so reason clauses retain their justifying literals).
+  uint32_t pivot = 0;
+  for (uint32_t c = 0; c < nc && pivot < nr; c++) {
+    if (!cols_unset[c])
+      continue;
+    int sel = -1;
+    for (uint32_t r = pivot; r < nr; r++)
+      if (gauss->work[r][c]) {
+        sel = (int) r;
+        break;
+      }
+    if (sel < 0)
+      continue;
+    if ((uint32_t) sel != pivot)
+      gauss->work[pivot].swapBoth (gauss->work[sel]);
+    for (uint32_t r = 0; r < nr; r++)
+      if (r != pivot && gauss->work[r][c])
+        gauss->work[r].xor_in (gauss->work[pivot]);
+    pivot++;
+  }
+
+  // Inspect the reduced rows for propagations and conflicts.
+  bool progress = false;
+  std::vector<int> rv; // variables of the current reduced row
+  for (uint32_t r = 0; r < nr; r++) {
+    Gauss::PackedRow pr = gauss->work[r];
+    rv.clear ();
+    int unassigned = 0, forced_var = 0, assigned_parity = 0;
+    for (uint32_t c = 0; c < nc; c++) {
+      if (!pr[c])
+        continue;
+      const int v = gauss->col_to_var[c];
+      rv.push_back (v);
+      if (cols_unset[c]) {
+        unassigned++;
+        forced_var = v;
+      } else if (cols_vals[c])
+        assigned_parity ^= 1;
+    }
+    if (unassigned >= 2 || rv.size () < 2)
+      continue; // free row, or a degenerate row we cannot explain (see header)
+    const int rhs = (int) (pr.rhs () & 1);
+    const std::vector<int> rowvars = rv; // copy; gauss_build_clause reuses 'rv'
+    if (unassigned == 1) {
+      if (val (forced_var))
+        continue;
+      const int want = rhs ^ assigned_parity;
+      const int forced = want ? forced_var : -forced_var;
+      Clause *reason = gauss_build_clause (rowvars, forced, forced_var);
+      search_assign_driving (forced, reason);
+      gauss->propagations++;
+      progress = true;
+    } else if (assigned_parity != rhs) { // fully assigned, wrong parity
+      conflict = gauss_build_clause (rowvars, 0, 0);
+      gauss->conflicts++;
+      return progress;
+    }
+  }
+  if (progress)
+    gauss->need_round = true; // reduced rows changed; re-examine next call
   return progress;
 }
 

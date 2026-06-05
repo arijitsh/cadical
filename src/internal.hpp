@@ -1267,7 +1267,6 @@ struct Internal {
   void init_gauss ();
   void reset_gauss ();
   bool gauss_round ();
-  bool gauss_eval_row (size_t r);
   bool gauss_check_model ();
   Clause *gauss_build_clause (const std::vector<int> &vars, int forced,
                               int forced_var);

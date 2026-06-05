@@ -1,0 +1,5 @@
+xor-test/test_matrix
+xor-test/__pycache__/
+xor-test/suite/
+xor-test/dense/
+xor-test/perf/

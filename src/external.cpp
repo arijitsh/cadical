@@ -232,6 +232,51 @@ void External::add (int elit) {
     eclause.clear ();
 }
 
+void External::add_xor_clause (const vector<int> &elits) {
+  // Validate the literals (same constraints as ordinary clause literals).
+  for (int elit : elits) {
+    assert (elit != INT_MIN);
+    REQUIRE (elit != 0,
+             "zero literal inside XOR clause (XOR lines are 0-terminated, "
+             "but the terminator must not be passed to 'add_xor_clause')");
+    REQUIRE (is_valid_input (elit), "invalid XOR literal '%d'", elit);
+  }
+
+  // Keep the raw constraint for the Gauss-Jordan engine.
+  xors.push_back (elits);
+
+  if (!internal->opts.xorblast)
+    return;
+
+  // Correctness fallback: blast  XOR(literals) == true  into CNF.
+  const size_t k = elits.size ();
+  if (k == 0) {
+    // Empty XOR == true is unsatisfiable.
+    add (0);
+    return;
+  }
+  REQUIRE (k <= 20,
+           "XOR clause of length %zu too long for CNF blasting; enable the "
+           "Gauss-Jordan engine instead",
+           k);
+
+  // Enumerate every truth pattern of the k literals.  XOR == true means an
+  // odd number of literals are true, so every pattern with an EVEN number of
+  // true literals must be forbidden by one clause that is falsified exactly
+  // by that pattern.
+  const uint64_t total = (uint64_t) 1 << k;
+  for (uint64_t mask = 0; mask < total; mask++) {
+    if (__builtin_popcountll (mask) & 1)
+      continue; // odd number true -> satisfies XOR -> allowed
+    for (size_t i = 0; i < k; i++) {
+      const int lit = elits[i];
+      const bool lit_true = (mask >> i) & 1u;
+      add (lit_true ? -lit : lit);
+    }
+    add (0);
+  }
+}
+
 void External::assume (int elit) {
   assert (elit);
   reset_extended ();

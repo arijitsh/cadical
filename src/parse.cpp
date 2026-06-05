@@ -259,6 +259,8 @@ const char *Parser::parse_dimacs_non_profiled (int &vars, int strict) {
   //
   int lit = 0;
   uint64_t parsed = 0;
+  bool in_xor = false;        // currently collecting an 'x ...' XOR clause
+  std::vector<int> xlits;     // accumulated literals of the current XOR clause
   while ((ch = parse_char ()) != EOF) {
     if (ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r')
       continue;
@@ -271,6 +273,15 @@ const char *Parser::parse_dimacs_non_profiled (int &vars, int strict) {
     }
     if (ch == 'a' && found_inccnf_header)
       break;
+    // A leading 'x' (only at the start of a clause) introduces a CMS-style
+    // XOR clause 'x l1 l2 ... lk 0' meaning XOR(l1,...,lk) == true.  We reuse
+    // the normal literal/whitespace/comment handling below and only route the
+    // collected literals to 'add_xor_clause' once the terminating '0' arrives.
+    if (ch == 'x' && !in_xor) {
+      in_xor = true;
+      xlits.clear ();
+      continue;
+    }
     const char *err = parse_lit (ch, lit, vars, strict);
     if (err)
       return err;
@@ -290,11 +301,25 @@ const char *Parser::parse_dimacs_non_profiled (int &vars, int strict) {
       (void) start;
 #endif
     }
-    solver->add (lit);
-    if (!found_inccnf_header && !lit && parsed++ >= clauses &&
-        strict != FORCED)
-      PER ("too many clauses");
+    if (in_xor) {
+      if (lit)
+        xlits.push_back (lit);
+      else {
+        solver->add_xor_clause (xlits);
+        in_xor = false;
+        if (!found_inccnf_header && parsed++ >= clauses && strict != FORCED)
+          PER ("too many clauses");
+      }
+    } else {
+      solver->add (lit);
+      if (!found_inccnf_header && !lit && parsed++ >= clauses &&
+          strict != FORCED)
+        PER ("too many clauses");
+    }
   }
+
+  if (in_xor)
+    PER ("last XOR clause without terminating '0'");
 
   if (lit)
     PER ("last clause without terminating '0'");

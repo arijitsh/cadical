@@ -260,6 +260,21 @@ public:
   //
   void add (int lit);
 
+  // Add an XOR constraint over the given literals with CMS semantics:
+  //
+  //   XOR(lits[0], ..., lits[n-1]) == true
+  //
+  // where a negative literal flips the right-hand-side parity (so e.g.
+  // 'add_xor_clause({-1, 2, 3})' encodes  v1 XOR v2 XOR v3 == false).  The
+  // vector must NOT be zero-terminated.  The constraint is recorded for the
+  // Gauss-Jordan engine and, when option 'xorblast' is set (default), also
+  // blasted to CNF so the solver stays correct without the GJ engine.
+  //
+  //   require (VALID)
+  //   ensure (STEADY )
+  //
+  void add_xor_clause (const std::vector<int> &lits);
+
   // Here are functions simplifying clause addition. The given literals
   // should all be valid (different from 'INT_MIN' and different from '0').
   //

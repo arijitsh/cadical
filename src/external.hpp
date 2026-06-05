@@ -66,6 +66,13 @@ struct External {
   vector<int> assumptions; // External assumptions.
   vector<int> constraint;  // External constraint. Terminated by zero.
 
+  // Stored XOR constraints (external literals, NOT zero-terminated). Each
+  // entry encodes  XOR(literals) == true  (CMS semantics: a negative literal
+  // flips the right-hand-side parity). Kept for the Gauss-Jordan engine; when
+  // 'opts.xorblast' is set they are additionally blasted to CNF for a correct
+  // fallback while the GJ engine is under construction.
+  vector<vector<int>> xors;
+
   vector<int64_t>
       ext_units; // External units. Needed to compute LRAT for eclause
   vector<bool> ext_flags; // to avoid duplicate units
@@ -312,6 +319,10 @@ struct External {
   // Proxies to IPASIR functions.
 
   void add (int elit);
+  // Add an XOR constraint over external literals (vector NOT zero-terminated)
+  // with the CMS convention  XOR(literals) == true.  Stores it for the GJ
+  // engine and, if 'opts.xorblast' is set, blasts it to CNF via 'add'.
+  void add_xor_clause (const vector<int> &elits);
   void assume (int elit);
   int solve (bool preprocess_only);
 

@@ -655,6 +655,15 @@ void Solver::add (int lit) {
   LOG_API_CALL_END ("add", lit);
 }
 
+void Solver::add_xor_clause (const std::vector<int> &lits) {
+  LOG_API_CALL_BEGIN ("add_xor_clause");
+  REQUIRE_VALID_STATE ();
+  transition_to_steady_state ();
+  external->add_xor_clause (lits); // validates each literal
+  STATE (STEADY);
+  LOG_API_CALL_END ("add_xor_clause");
+}
+
 void Solver::clause (int a) {
   REQUIRE_VALID_LIT (a);
   add (a), add (0);

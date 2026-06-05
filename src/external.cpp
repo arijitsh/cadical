@@ -245,6 +245,19 @@ void External::add_xor_clause (const vector<int> &elits) {
   // Keep the raw constraint for the Gauss-Jordan engine.
   xors.push_back (elits);
 
+  // Ensure every XOR variable has an internal counterpart even when we do not
+  // blast to CNF, so the Gauss-Jordan engine can map external XOR literals to
+  // internal variables via 'e2i'.  Also freeze them when the Gauss-Jordan
+  // engine may run: the engine keeps fixed variable indices and reasons over
+  // these variables, so they must not be eliminated, substituted, or have
+  // their value reconstructed via the extension stack during (in)processing.
+  const bool keep = internal->opts.gauss && !internal->opts.xorblast;
+  for (const int elit : elits) {
+    (void) internalize (elit);
+    if (keep)
+      freeze (elit);
+  }
+
   if (!internal->opts.xorblast)
     return;
 

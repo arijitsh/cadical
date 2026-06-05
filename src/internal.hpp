@@ -59,6 +59,7 @@ extern "C" {
 #include "contract.hpp"
 #include "cover.hpp"
 #include "decompose.hpp"
+#include "gauss.hpp"
 #include "drattracer.hpp"
 #include "elim.hpp"
 #include "ema.hpp"
@@ -311,6 +312,7 @@ struct Internal {
 
   Internal *internal; // proxy to 'this' in macros
   External *external; // proxy to 'external' buddy in 'Solver'
+  GaussMatrix *gauss; // Gauss-Jordan XOR engine state (0 if inactive)
 
   static constexpr unsigned max_used =
       31; // must fit into the header of the clause!
@@ -1260,6 +1262,15 @@ struct Internal {
   void try_to_fasteliminate_variable (Eliminator &, int pivot, bool &);
   int elimfast_round (bool &completed, bool &);
   void elimfast ();
+
+  // Gauss-Jordan XOR engine in 'gauss.cpp'
+  void init_gauss ();
+  void reset_gauss ();
+  bool gauss_round ();
+  bool gauss_eval_row (size_t r);
+  bool gauss_check_model ();
+  Clause *gauss_build_clause (const std::vector<int> &vars, int forced,
+                              int forced_var);
 
   // sweeping in 'sweep.cpp'
   int sweep_solve ();

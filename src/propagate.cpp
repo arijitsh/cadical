@@ -237,6 +237,11 @@ bool Internal::propagate () {
   int64_t before = propagated;
   int64_t ticks = 0;
 
+  // Outer loop interleaves ordinary BCP with the Gauss-Jordan XOR engine:
+  // after BCP reaches a fixpoint we run one Gauss round, which may assign
+  // further literals (re-triggering BCP) or set a conflict.
+  for (;;) {
+
   while (!conflict && propagated != trail.size ()) {
 
     const int lit = -trail[propagated++];
@@ -459,6 +464,13 @@ bool Internal::propagate () {
       ws.resize (j - ws.begin ());
     }
   }
+
+  if (conflict || !gauss)
+    break;
+  if (!gauss_round ()) // no further propagation (may have set 'conflict')
+    break;
+
+  } // outer BCP / Gauss-Jordan loop
 
   if (searching_lucky_phases) {
 

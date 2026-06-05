@@ -30,7 +30,7 @@ Internal::Internal ()
       profiles (this), force_phase_messages (false),
 #endif
       arena (this), prefix ("c "), internal (this), external (0),
-      termination_forced (false), vars (this->max_var),
+      gauss (0), termination_forced (false), vars (this->max_var),
       lits (this->max_var) {
   control.push_back (Level (0, 0));
 
@@ -64,6 +64,7 @@ Internal::~Internal () {
 #undef PROFILE
 #endif
   delete[] (char *) dummy_binary;
+  reset_gauss ();
   for (const auto &c : clauses)
     delete_clause (c);
   if (proof)
@@ -307,6 +308,8 @@ int Internal::cdcl_loop_with_inprocessing () {
           continue;
         else
           analyze ();
+      } else if (gauss && !gauss_check_model ()) {
+        analyze (); // a Gauss-Jordan XOR row is falsified by the candidate model
       } else if (satisfied ())
         res = 10;
     } else if (search_limits_hit ())
@@ -955,6 +958,35 @@ int Internal::solve (bool preprocess_only) {
   START (solve);
   if (proof)
     proof->solve_query ();
+
+  // The current (static) Gauss-Jordan XOR engine stores fixed internal
+  // variable indices, so it requires stable variable identities.  While it is
+  // active we therefore switch off the inprocessing techniques that remove or
+  // renumber variables.  (This restriction is lifted by the incremental
+  // watched-column engine planned on top of the same matrix core.)
+  if (opts.gauss && !proof && !lrat && !external->xors.empty ()) {
+    opts.elim = 0;
+    opts.compact = 0;
+    opts.decompose = 0;
+    opts.block = 0;
+    opts.factor = 0;
+    opts.congruence = 0;
+    opts.sweep = 0;
+    opts.vivify = 0;
+    // These phases can declare the formula satisfiable from the CNF part alone
+    // (ignoring the not-yet-enforced XOR constraints), so disable them: XOR
+    // constraints are only enforced inside CDCL propagation.
+    opts.walk = 0;
+    opts.lucky = 0;
+    opts.luckyearly = 0;
+    opts.luckylate = 0;
+    // Anything that can substitute / reconstruct variables via the extension
+    // stack would desynchronise the matrix's fixed variable indices.
+    opts.probe = 0;
+    opts.transred = 0;
+    opts.ternary = 0;
+    opts.instantiate = 0;
+  }
   if (opts.ilb) {
     sort_and_reuse_assumptions ();
     assert (opts.ilb || (size_t) level <= assumptions.size ());
@@ -978,6 +1010,14 @@ int Internal::solve (bool preprocess_only) {
     backtrack ();
   if (!res)
     res = restore_clauses ();
+  // Build the Gauss-Jordan XOR matrix before any preprocessing, while the CNF
+  // clauses are still live and watched; root-level units it derives are then
+  // propagated by the normal machinery.
+  if (!res && !level) {
+    init_gauss ();
+    if (unsat)
+      res = 20;
+  }
   if (!res || (res == 10 && external_prop)) {
     init_preprocessing_limits ();
     if (!preprocess_only)

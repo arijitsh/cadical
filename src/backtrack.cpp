@@ -91,6 +91,8 @@ void Internal::backtrack_without_updating_phases (int new_level) {
   if (new_level == level)
     return;
 
+  gauss_notify_backtrack ();
+
   stats.backtracks++;
 
   assert (num_assigned == trail.size ());

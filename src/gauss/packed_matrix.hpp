@@ -111,6 +111,36 @@ public:
     return ret;
   }
 
+  // this = a & b (column part only); returns the popcount of the result.
+  uint32_t set_and_popcnt (const PackedRow &a, const PackedRow &b) {
+    uint32_t ret = 0;
+    for (int i = 0; i < size; i++) {
+      mp[i] = a.mp[i] & b.mp[i];
+      ret += __builtin_popcountll ((uint64_t) mp[i]);
+    }
+    return ret;
+  }
+
+  // Column index of the first set bit, or -1 if the row is all zero.
+  int first_set_bit () const {
+    for (int i = 0; i < size; i++)
+      if (mp[i])
+        return i * 64 + __builtin_ctzll ((uint64_t) mp[i]);
+    return -1;
+  }
+
+  // Call 'f(col)' for every set column, in increasing column order.
+  template <class F> void for_each_set_bit (F f) const {
+    for (int i = 0; i < size; i++) {
+      uint64_t w = (uint64_t) mp[i];
+      while (w) {
+        const int b = __builtin_ctzll (w);
+        f ((uint32_t) (i * 64 + b));
+        w &= w - 1;
+      }
+    }
+  }
+
   int get_size () const { return size; }
 
 private:

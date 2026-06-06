@@ -1266,10 +1266,19 @@ struct Internal {
   // Gauss-Jordan XOR engine in 'gauss.cpp'
   void init_gauss ();
   void reset_gauss ();
+  void gauss_notify_backtrack ();
   bool gauss_round ();
   bool gauss_check_model ();
   Clause *gauss_build_clause (const std::vector<int> &vars, int forced,
                               int forced_var);
+  void gauss_update_cols (int just_assigned_var); // -1 = full refresh
+  GaussRet gauss_prop_row (uint32_t row, uint32_t &new_resp_var,
+                           int &ret_lit_prop);
+  int gauss_find_truths (uint32_t row, uint32_t var, uint32_t &new_resp_var,
+                         uint32_t &new_resp_row, bool &do_eliminate);
+  bool gauss_eliminate_col (uint32_t p, uint32_t new_resp_var,
+                            uint32_t new_resp_row);
+  Clause *gauss_row_clause (uint32_t row, int forced, int forced_var);
 
   // sweeping in 'sweep.cpp'
   int sweep_solve ();
